@@ -1,0 +1,151 @@
+### VoiceTask Backend API Requests
+
+### SETUP: Copy your Supabase JWT and set it as @token variable
+### Get JWT from: Supabase Dashboard → Auth → Users → (select user) → Generate JWT
+
+@baseUrl = http://localhost:3000
+@token = your-supabase-jwt-here
+
+### Health Check (no auth required)
+GET {{baseUrl}}/health
+
+
+### ========== USERS API ==========
+
+### Create or Update User (JIT provisioning)
+POST {{baseUrl}}/users/me
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "picture": "https://example.com/photo.jpg",
+  "timezone": "Asia/Kolkata"
+}
+
+### Update User Profile
+PATCH {{baseUrl}}/users/me
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Jane Doe",
+  "timezone": "America/New_York"
+}
+
+
+### ========== VOICE API ==========
+
+### Transcribe Audio File (in-memory, no persistence)
+### Create a test.m4a file or use any audio file
+POST {{baseUrl}}/voice/transcribe
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
+
+------WebKitFormBoundary
+Content-Disposition: form-data; name="audio"; filename="test.m4a"
+Content-Type: audio/mp4
+
+< ./test.m4a
+------WebKitFormBoundary--
+
+### Extract Task from Transcript Text
+POST {{baseUrl}}/voice/extract
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "text": "Call mom tomorrow at 6pm to discuss the new project",
+  "timezone": "Asia/Kolkata"
+}
+
+
+### ========== TASKS API ==========
+
+### List All Tasks (optional: ?status=PENDING)
+GET {{baseUrl}}/tasks
+Authorization: Bearer {{token}}
+
+### List Pending Tasks Only
+GET {{baseUrl}}/tasks?status=PENDING
+Authorization: Bearer {{token}}
+
+### Get Single Task
+GET {{baseUrl}}/tasks/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+### Create Task with Future Due Date (will schedule QStash reminder)
+POST {{baseUrl}}/tasks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Call mom",
+  "description": "Discuss the new project",
+  "dueAt": "2026-05-05T18:00:00Z",
+  "reminderOffsetMinutes": 15,
+  "priority": "MEDIUM",
+  "transcript": "Call mom tomorrow at 6pm to discuss the new project"
+}
+
+### Create Task without Due Date
+POST {{baseUrl}}/tasks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Buy groceries",
+  "description": "Milk, eggs, bread",
+  "priority": "LOW"
+}
+
+### Update Task (reschedules QStash if dueAt/reminderOffset changed)
+PATCH {{baseUrl}}/tasks/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Call mom - Updated",
+  "status": "COMPLETED"
+}
+
+### Mark Task as Completed (cancels QStash reminder)
+PATCH {{baseUrl}}/tasks/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "COMPLETED"
+}
+
+### Delete Task (cancels QStash reminder)
+DELETE {{baseUrl}}/tasks/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+
+### ========== DEVICES API ==========
+
+### Register Device for Push Notifications
+### Call this on app sign-in with the FCM token
+POST {{baseUrl}}/devices
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fcmToken": "cMzR6n5fwQw:APA91bF0abcdef123456...",
+  "platform": "android"
+}
+
+### Unregister Device (call on sign-out)
+DELETE {{baseUrl}}/devices/cMzR6n5fwQw:APA91bF0abcdef123456...
+Authorization: Bearer {{token}}
+
+
+### ========== WEBHOOKS (QStash Internal) ==========
+### These are called by QStash, not by your app
+### QStash verifies signature with UPSTASH_CURRENT_SIGNING_KEY + UPSTASH_NEXT_SIGNING_KEY
+
+### POST /webhooks/qstash (fired when task is due)
+### Headers: Upstash-Signature: <signature>
+### Body: { "taskId": "..." }
+### This endpoint sends FCM notifications to all user devices

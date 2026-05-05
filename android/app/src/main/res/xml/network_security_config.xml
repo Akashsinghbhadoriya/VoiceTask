@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow cleartext HTTP only to the Android emulator localhost -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+    <!-- All other traffic (Supabase, Firebase, etc.) must use HTTPS -->
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
