@@ -75,10 +75,12 @@ fun RecordScreen(
             override fun run() {
                 if (isRecording > 0) {
                     recordingTime += 100
-                    timer.postDelayed(this, 100)
                 }
+                timer.postDelayed(this, 100)
             }
         }
+
+        timer.postDelayed(runnable, 100)
 
         onDispose {
             timer.removeCallbacks(runnable)
@@ -133,12 +135,17 @@ fun RecordScreen(
                                             recordingTime = 0L
                                             audioRecorder.startRecording(
                                                 onComplete = {
-                                                    audioRecorder.getCurrentFile()?.let { file ->
-                                                        viewModel.transcribeAudio(file)
+                                                    if (recordingTime >= 500) {
+                                                        audioRecorder.getCurrentFile()?.let { file ->
+                                                            viewModel.transcribeAudio(file)
+                                                        }
+                                                    } else {
+                                                        viewModel.setError("Recording too short (min 0.5s)")
                                                     }
                                                     isRecording = 0L
                                                 },
-                                                onError = {
+                                                onError = { error ->
+                                                    viewModel.setError("Recording failed: $error")
                                                     isRecording = 0L
                                                 }
                                             )

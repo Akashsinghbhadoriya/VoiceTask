@@ -6,7 +6,7 @@ let qstashClient: Client | null = null;
 function getQstashClient(): Client {
   if (!qstashClient) {
     const env = getEnv();
-    qstashClient = new Client({ token: env.QSTASH_TOKEN });
+    qstashClient = new Client({ token: env.QSTASH_TOKEN, baseUrl: env.QSTASH_URL });
   }
   return qstashClient;
 }

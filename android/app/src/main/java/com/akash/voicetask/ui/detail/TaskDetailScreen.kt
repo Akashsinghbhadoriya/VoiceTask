@@ -37,6 +37,21 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.akash.voicetask.domain.model.Task
 import com.akash.voicetask.domain.model.UiState
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
+private fun formatDateTime(isoString: String?): String {
+    if (isoString == null) return ""
+    return try {
+        // Try parsing as ISO format (with or without Z)
+        val cleaned = isoString.replace("Z", "").trim()
+        val dateTime = LocalDateTime.parse(cleaned)
+        dateTime.format(DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm"))
+    } catch (e: Exception) {
+        android.util.Log.e("formatDateTime", "Failed to parse: $isoString", e)
+        isoString
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -142,6 +157,7 @@ fun TaskDetailContent(
     var title by remember { mutableStateOf(task.title) }
     var description by remember { mutableStateOf(task.description ?: "") }
     var dueAtStr by remember { mutableStateOf(task.dueAt ?: "") }
+    var dueAtDisplay by remember { mutableStateOf(task.dueAtUser?.let { formatDateTime(it) } ?: "") }
     var reminderOffset by remember { mutableStateOf(task.reminderOffsetMinutes) }
     var priority by remember { mutableStateOf(task.priority.uppercase()) }
 
@@ -175,8 +191,8 @@ fun TaskDetailContent(
         )
 
         TextField(
-            value = dueAtStr,
-            onValueChange = { dueAtStr = it },
+            value = if (isEditing) dueAtStr else dueAtDisplay,
+            onValueChange = { if (isEditing) dueAtStr = it },
             label = { Text("Due Date & Time") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,

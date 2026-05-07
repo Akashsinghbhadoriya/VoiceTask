@@ -20,8 +20,11 @@ class TaskListViewModel @Inject constructor(
     private val supabaseClient: SupabaseClient
 ) : ViewModel() {
 
-    private val _tasks = MutableStateFlow<List<Task>>(emptyList())
-    val tasks: StateFlow<List<Task>> = _tasks.asStateFlow()
+    private val _pendingTasks = MutableStateFlow<List<Task>>(emptyList())
+    val pendingTasks: StateFlow<List<Task>> = _pendingTasks.asStateFlow()
+
+    private val _completedTasks = MutableStateFlow<List<Task>>(emptyList())
+    val completedTasks: StateFlow<List<Task>> = _completedTasks.asStateFlow()
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
@@ -36,14 +39,20 @@ class TaskListViewModel @Inject constructor(
     private fun loadTasks() {
         viewModelScope.launch {
             try {
-                taskRepository.getAllTasks().collect { tasks ->
-                    _tasks.value = tasks.sortedWith(
-                        compareBy<Task> { it.dueAt == null }
-                            .thenBy { it.dueAt }
-                    )
-                }
+                // First, try to refresh from API to populate local DB
+                taskRepository.refreshTasks()
             } catch (e: Exception) {
                 _error.value = e.message
+            }
+
+            // Then observe local DB for changes
+            taskRepository.getAllTasks().collect { tasks ->
+                val sorted = tasks.sortedWith(
+                    compareBy<Task> { it.dueAt == null }
+                        .thenBy { it.dueAt }
+                )
+                _pendingTasks.value = sorted.filter { it.status == "PENDING" }
+                _completedTasks.value = sorted.filter { it.status == "COMPLETED" }
             }
         }
     }

@@ -45,12 +45,13 @@ class RecordViewModel @Inject constructor(
         }
     }
 
-    fun extractTask(transcript: String, timezone: String) {
+    fun extractTask(transcript: String, timezone: String, onSuccess: (() -> Unit)? = null) {
         viewModelScope.launch {
             try {
                 _recordStep.value = RecordStep.Extracting(transcript)
                 val extracted = voiceRepository.extractTask(transcript, timezone)
                 _recordStep.value = RecordStep.Preview(transcript, extracted)
+                onSuccess?.invoke()
             } catch (e: Exception) {
                 _error.value = e.message ?: "Extraction failed"
                 _recordStep.value = RecordStep.Transcript(transcript)
@@ -64,9 +65,9 @@ class RecordViewModel @Inject constructor(
         transcribeAudio(audioFile, timezone)
     }
 
-    fun retryExtraction(transcript: String, timezone: String) {
+    fun retryExtraction(transcript: String, timezone: String, onSuccess: (() -> Unit)? = null) {
         _error.value = null
-        extractTask(transcript, timezone)
+        extractTask(transcript, timezone, onSuccess)
     }
 
     fun resetRecording() {
@@ -76,5 +77,9 @@ class RecordViewModel @Inject constructor(
 
     fun clearError() {
         _error.value = null
+    }
+
+    fun setError(message: String) {
+        _error.value = message
     }
 }

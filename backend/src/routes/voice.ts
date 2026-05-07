@@ -3,6 +3,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { transcribeAudio, extractTaskDetails } from '../services/openai.js';
 import { extractTaskSchema, transcribeResponseSchema, extractedTaskSchema } from '../schemas/task.js';
 import { BadRequestError } from '../utils/errors.js';
+import { getSupabase } from '../config/supabase.js';
 
 // AUDIO IS NEVER PERSISTED — in-memory buffer only, discarded after OpenAI call
 
@@ -22,6 +23,19 @@ async function postTranscribe(request: FastifyRequest, reply: FastifyReply) {
   }
 
   const buffer = Buffer.concat(chunks);
+  const fileSizeKB = buffer.length / 1024;
+  const fileSizeMB = fileSizeKB / 1024;
+
+  request.log.info(
+    {
+      fileSizeBytes: buffer.length,
+      fileSizeKB: fileSizeKB.toFixed(2),
+      fileSizeMB: fileSizeMB.toFixed(4),
+      fileName: data.filename,
+      mimeType: data.mimetype,
+    },
+    'Audio file received'
+  );
 
   // Validate file size (max 10 MB)
   const maxSize = 10 * 1024 * 1024;
@@ -53,10 +67,29 @@ async function postExtract(request: FastifyRequest, reply: FastifyReply) {
     throw new BadRequestError('Invalid request body');
   }
 
-  const { text, timezone } = bodyResult.data;
+  const { text, timezone: clientProvidedTimezone } = bodyResult.data;
+  const userId = request.user!.id;
 
   try {
-    const extracted = await extractTaskDetails(text, timezone);
+    // Fetch user's timezone from database
+    let userTimezone = clientProvidedTimezone;
+
+    if (!userTimezone) {
+      const supabase = getSupabase();
+      const { data: user, error } = (await supabase
+        .from('users')
+        .select('timezone')
+        .eq('id', userId)
+        .single()) as any;
+
+      if (error) {
+        request.log.warn({ error }, 'Failed to fetch user timezone, using default');
+      }
+
+      userTimezone = user?.timezone || 'Asia/Kolkata'; // Default to India timezone
+    }
+
+    const extracted = await extractTaskDetails(text, userTimezone);
     const result = extractedTaskSchema.parse(extracted);
 
     reply.status(200).send(result);

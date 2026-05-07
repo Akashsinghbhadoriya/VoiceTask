@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { verifySupabaseJwt } from '../services/supabaseJwt.js';
+import { getSupabase } from '../config/supabase.js';
 import { UnauthorizedError } from '../utils/errors.js';
 
 export interface AuthUser {
@@ -19,6 +20,27 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
   try {
     const user = await verifySupabaseJwt(token);
     request.user = user;
+
+    // Ensure user exists in database (create or update)
+    const supabase = getSupabase();
+    const { data: existingUser } = (await supabase
+      .from('users')
+      .select('id')
+      .eq('id', user.id)
+      .single()) as any;
+
+    if (!existingUser) {
+      // Create user with default timezone
+      await supabase
+        .from('users')
+        .insert({
+          id: user.id,
+          email: user.email,
+          timezone: 'Asia/Kolkata',
+        } as any)
+        .select()
+        .single();
+    }
   } catch (error) {
     throw new UnauthorizedError(
       error instanceof Error ? error.message : 'Invalid token'

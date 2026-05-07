@@ -11,6 +11,7 @@ data class TaskEntity(
     val title: String,
     val description: String?,
     val dueAt: String?,
+    val dueAtUser: String?,
     val reminderOffsetMinutes: Int,
     val priority: String,
     val status: String,

@@ -4,12 +4,14 @@ import android.content.Context
 import android.media.MediaRecorder
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import java.io.File
 
 class AudioRecorder(private val context: Context) {
     private var mediaRecorder: MediaRecorder? = null
     private var currentFile: File? = null
     private val stopHandler = Handler(Looper.getMainLooper())
+    private val TAG = "AudioRecorder"
 
     private var onRecordingComplete: (() -> Unit)? = null
     private var onRecordingError: ((String) -> Unit)? = null
@@ -22,6 +24,7 @@ class AudioRecorder(private val context: Context) {
             // Create output file
             val cacheDir = context.cacheDir
             currentFile = File(cacheDir, "recording_${System.currentTimeMillis()}.m4a")
+            Log.d(TAG, "Starting recording to: ${currentFile?.absolutePath}")
 
             mediaRecorder = MediaRecorder().apply {
                 setAudioSource(MediaRecorder.AudioSource.MIC)
@@ -35,6 +38,8 @@ class AudioRecorder(private val context: Context) {
                 start()
             }
 
+            Log.d(TAG, "Recording started successfully")
+
             // Auto-stop after 60 seconds
             stopHandler.postDelayed({
                 if (mediaRecorder != null) {
@@ -42,6 +47,7 @@ class AudioRecorder(private val context: Context) {
                 }
             }, 60000)
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to start recording", e)
             onRecordingError?.invoke(e.message ?: "Failed to start recording")
         }
     }
@@ -56,8 +62,12 @@ class AudioRecorder(private val context: Context) {
             }
             mediaRecorder = null
 
+            val fileSize = currentFile?.length() ?: 0
+            Log.d(TAG, "Recording stopped. File size: $fileSize bytes (${fileSize / 1024} KB)")
+
             onRecordingComplete?.invoke()
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to stop recording", e)
             onRecordingError?.invoke(e.message ?: "Failed to stop recording")
             currentFile?.delete()
             currentFile = null

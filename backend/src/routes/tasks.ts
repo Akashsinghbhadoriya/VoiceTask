@@ -4,6 +4,24 @@ import { getSupabase } from '../config/supabase.js';
 import { createTaskSchema, updateTaskSchema } from '../schemas/task.js';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../utils/errors.js';
 import { scheduleTaskReminder, cancelTaskReminder } from '../services/qstash.js';
+import { convertUtcToUserTimezone } from '../services/openai.js';
+
+// Helper to add dueAtUser field for user's timezone display
+async function addDueAtUserField(tasks: any[], userId: string): Promise<any[]> {
+  const supabase = getSupabase();
+  const { data: user } = (await supabase
+    .from('users')
+    .select('timezone')
+    .eq('id', userId)
+    .single()) as any;
+
+  const timezone = user?.timezone || 'Asia/Kolkata';
+
+  return tasks.map(task => ({
+    ...task,
+    dueAtUser: convertUtcToUserTimezone(task.due_at, timezone),
+  }));
+}
 
 async function getTasks(request: FastifyRequest, reply: FastifyReply) {
   await authMiddleware(request, reply);
@@ -24,7 +42,8 @@ async function getTasks(request: FastifyRequest, reply: FastifyReply) {
 
   if (error) throw new BadRequestError(error.message);
 
-  reply.status(200).send(data || []);
+  const tasksWithUserTime = await addDueAtUserField(data || [], request.user!.id);
+  reply.status(200).send(tasksWithUserTime);
 }
 
 async function getTaskById(request: FastifyRequest, reply: FastifyReply) {
@@ -48,7 +67,8 @@ async function getTaskById(request: FastifyRequest, reply: FastifyReply) {
     throw new ForbiddenError('You do not own this task');
   }
 
-  reply.status(200).send(task);
+  const [taskWithUserTime] = await addDueAtUserField([task], request.user!.id);
+  reply.status(200).send(taskWithUserTime);
 }
 
 async function postTask(request: FastifyRequest, reply: FastifyReply) {
@@ -56,20 +76,28 @@ async function postTask(request: FastifyRequest, reply: FastifyReply) {
 
   const bodyResult = createTaskSchema.safeParse(request.body);
   if (!bodyResult.success) {
+    request.log.error(
+      { errors: bodyResult.error.errors, body: request.body },
+      'Task creation validation failed'
+    );
     throw new BadRequestError('Invalid request body');
   }
 
   const { title, description, dueAt, reminderOffsetMinutes, priority, transcript } = bodyResult.data;
 
-  const supabase = getSupabase();
+  request.log.info(
+    {
+      title,
+      description,
+      dueAt,
+      reminderOffsetMinutes,
+      priority,
+      hasTranscript: !!transcript,
+    },
+    'Creating task with extracted details'
+  );
 
-  // Schedule reminder if dueAt is provided
-  let qstashMessageId: string | null = null;
-  if (dueAt) {
-    const dueDate = new Date(dueAt);
-    const fireTime = new Date(dueDate.getTime() - reminderOffsetMinutes * 60 * 1000);
-    qstashMessageId = await scheduleTaskReminder('temp-id', fireTime) || null;
-  }
+  const supabase = getSupabase();
 
   const { data: task, error } = (await supabase
     .from('tasks')
@@ -82,14 +110,52 @@ async function postTask(request: FastifyRequest, reply: FastifyReply) {
       priority: priority.toUpperCase(),
       transcript: transcript || null,
       status: 'PENDING',
-      qstash_message_id: qstashMessageId,
+      qstash_message_id: null,
     } as any)
     .select()
     .single()) as any;
 
-  if (error) throw new BadRequestError(error.message);
+  if (error) {
+    request.log.error({ error }, 'Task creation database error');
+    throw new BadRequestError(error.message);
+  }
 
-  reply.status(201).send(task);
+  // Schedule reminder with the actual task ID
+  let qstashMessageId: string | null = null;
+  if (dueAt) {
+    const dueDate = new Date(dueAt);
+    const fireTime = new Date(dueDate.getTime() - reminderOffsetMinutes * 60 * 1000);
+
+    request.log.info(
+      { taskId: task.id, fireTime, dueDate, reminderOffsetMinutes },
+      'Scheduling reminder'
+    );
+
+    try {
+      qstashMessageId = await scheduleTaskReminder(task.id, fireTime) || null;
+      request.log.info({ taskId: task.id, qstashMessageId }, 'Reminder scheduled');
+
+      // Update task with qstash message ID
+      if (qstashMessageId) {
+        const { error: updateError } = await (supabase.from('tasks') as any)
+          .update({ qstash_message_id: qstashMessageId })
+          .eq('id', task.id);
+
+        if (updateError) {
+          request.log.error({ updateError }, 'Failed to update qstash_message_id');
+        }
+      } else {
+        request.log.warn({ taskId: task.id }, 'scheduleTaskReminder returned empty messageId');
+      }
+    } catch (error) {
+      request.log.error({ error, taskId: task.id }, 'Failed to schedule reminder');
+    }
+  } else {
+    request.log.warn('Task created without dueAt - no reminder will be scheduled');
+  }
+
+  const [taskWithUserTime] = await addDueAtUserField([task], request.user!.id);
+  reply.status(201).send(taskWithUserTime);
 }
 
 async function patchTask(request: FastifyRequest, reply: FastifyReply) {
@@ -158,7 +224,8 @@ async function patchTask(request: FastifyRequest, reply: FastifyReply) {
 
   if (updateError) throw new BadRequestError(updateError.message);
 
-  reply.status(200).send(updated);
+  const [updatedWithUserTime] = await addDueAtUserField([updated], request.user!.id);
+  reply.status(200).send(updatedWithUserTime);
 }
 
 async function deleteTask(request: FastifyRequest, reply: FastifyReply) {

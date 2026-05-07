@@ -17,6 +17,7 @@ import com.akash.voicetask.ui.record.RecordViewModel
 import com.akash.voicetask.ui.record.TranscriptScreen
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
+import android.net.Uri
 
 @Composable
 fun AppNavigation() {
@@ -58,7 +59,7 @@ fun AppNavigation() {
         composable("record") {
             RecordScreen(
                 onNavigateToTranscript = { transcript ->
-                    navController.navigate("transcript/$transcript")
+                    navController.navigate("transcript/${Uri.encode(transcript)}")
                 },
                 onNavigateBack = {
                     navController.popBackStack()
@@ -76,7 +77,7 @@ fun AppNavigation() {
                 transcript = transcript,
                 viewModel = recordViewModel,
                 onNavigateToPreview = { editedTranscript, timezone ->
-                    navController.navigate("preview/$editedTranscript/$timezone")
+                    navController.navigate("preview/${Uri.encode(editedTranscript)}/${Uri.encode(timezone)}")
                 },
                 onNavigateBack = {
                     navController.popBackStack()
@@ -86,18 +87,24 @@ fun AppNavigation() {
 
         composable("preview/{transcript}/{timezone}") { backStackEntry ->
             val transcript = backStackEntry.arguments?.getString("transcript") ?: ""
-            val timezone = backStackEntry.arguments?.getString("timezone") ?: "Asia/Kolkata"
-            // Note: In a real app, you'd pass the extracted task object differently
-            // For now, we'll reconstruct it from the previous state
-            PreviewScreen(
-                transcript = transcript,
-                extracted = com.akash.voicetask.domain.model.ExtractedTask(
-                    title = "Task",
+            val recordBackStackEntry = remember(navController) {
+                navController.getBackStackEntry("record")
+            }
+            val recordViewModel: RecordViewModel = hiltViewModel(recordBackStackEntry)
+            val recordStep = recordViewModel.recordStep.collectAsState()
+
+            val extracted = (recordStep.value as? RecordViewModel.RecordStep.Preview)?.extracted
+                ?: com.akash.voicetask.domain.model.ExtractedTask(
+                    title = transcript,
                     description = null,
                     dueAt = null,
                     reminderOffsetMinutes = 15,
                     priority = "medium"
-                ),
+                )
+
+            PreviewScreen(
+                transcript = transcript,
+                extracted = extracted,
                 onTaskSaved = {
                     navController.navigate("home") {
                         popUpTo("preview/{transcript}/{timezone}") { inclusive = true }

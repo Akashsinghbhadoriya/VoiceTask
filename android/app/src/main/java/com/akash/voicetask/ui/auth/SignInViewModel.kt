@@ -2,6 +2,8 @@ package com.akash.voicetask.ui.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.akash.voicetask.data.remote.ApiService
+import com.akash.voicetask.data.remote.UserUpdateRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
@@ -10,11 +12,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 
 @HiltViewModel
 class SignInViewModel @Inject constructor(
-    internal val client: SupabaseClient
+    internal val client: SupabaseClient,
+    private val apiService: ApiService
 ) : ViewModel() {
 
     private val _session = MutableStateFlow<UserSession?>(null)
@@ -31,7 +36,18 @@ class SignInViewModel @Inject constructor(
         // re-read currentSessionOrNull() so the UI reacts without needing to know SessionStatus types
         viewModelScope.launch {
             client.auth.sessionStatus.collect {
-                _session.value = client.auth.currentSessionOrNull()
+                val newSession = client.auth.currentSessionOrNull()
+                _session.value = newSession
+                if (newSession != null) {
+                    try {
+                        val metadata = client.auth.currentUserOrNull()?.userMetadata
+                        val name = metadata?.get("full_name")?.jsonPrimitive?.contentOrNull
+                        val picture = metadata?.get("picture")?.jsonPrimitive?.contentOrNull
+                        apiService.createOrUpdateUser(UserUpdateRequest(name = name, picture = picture))
+                    } catch (_: Exception) {
+                        // Non-fatal: backend user sync failed, task creation will retry on next sign-in
+                    }
+                }
             }
         }
     }

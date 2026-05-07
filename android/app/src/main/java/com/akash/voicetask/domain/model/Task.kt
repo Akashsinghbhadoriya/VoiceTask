@@ -1,20 +1,23 @@
 package com.akash.voicetask.domain.model
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class Task(
     val id: String,
-    val userId: String,
+    @SerialName("user_id") val userId: String,
     val title: String,
     val description: String? = null,
-    val dueAt: String? = null,
-    val reminderOffsetMinutes: Int = 15,
+    @SerialName("due_at") val dueAt: String? = null,
+    val dueAtUser: String? = null,
+    @SerialName("reminder_offset_minutes") val reminderOffsetMinutes: Int = 15,
     val priority: String = "MEDIUM",
     val status: String = "PENDING",
     val transcript: String? = null,
-    val createdAt: String,
-    val updatedAt: String
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("updated_at") val updatedAt: String,
+    @SerialName("qstash_message_id") val qstashMessageId: String? = null
 )
 
 @Serializable

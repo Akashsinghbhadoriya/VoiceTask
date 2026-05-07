@@ -28,6 +28,7 @@ export const taskResponseSchema = z.object({
   title: z.string(),
   description: z.string().nullable(),
   dueAt: z.string().datetime().nullable(),
+  dueAtUser: z.string().datetime().nullable(),
   reminderOffsetMinutes: z.number(),
   priority: prioritySchema,
   status: taskStatusSchema,

@@ -76,8 +76,9 @@ fun TranscriptScreen(
             ) {
                 Button(
                     onClick = {
-                        viewModel.extractTask(editedTranscript, "Asia/Kolkata")
-                        onNavigateToPreview(editedTranscript, "Asia/Kolkata")
+                        viewModel.extractTask(editedTranscript, "Asia/Kolkata") {
+                            onNavigateToPreview(editedTranscript, "Asia/Kolkata")
+                        }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
