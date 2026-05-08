@@ -65,6 +65,7 @@ fun PreviewScreen(
     var title by remember { mutableStateOf(extracted.title) }
     var description by remember { mutableStateOf(extracted.description ?: "") }
     var dueAtStr by remember { mutableStateOf(extracted.dueAt ?: "") }
+    var dueAtDisplay by remember { mutableStateOf(extracted.dueAtUser?.let { formatDateTime(it) } ?: "") }
     var reminderOffset by remember { mutableStateOf(extracted.reminderOffsetMinutes) }
     var priority by remember { mutableStateOf(extracted.priority.uppercase()) }
 
@@ -108,21 +109,13 @@ fun PreviewScreen(
             )
 
             TextField(
-                value = dueAtStr,
-                onValueChange = { dueAtStr = it },
-                label = { Text("Due Date & Time (ISO 8601)") },
+                value = dueAtDisplay,
+                onValueChange = {},
+                label = { Text("Due Date & Time") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                readOnly = true
             )
-
-            // Display the formatted due date/time in IST from backend extraction
-            if (extracted.dueAtUser != null) {
-                Text(
-                    text = "Extracted Time: ${formatDateTime(extracted.dueAtUser)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
 
             ExposedDropdownMenuBox(
                 expanded = reminderExpanded,
