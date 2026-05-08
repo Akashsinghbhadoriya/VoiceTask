@@ -7,6 +7,14 @@ function getFirebaseApp(): admin.app.App {
   if (!adminApp) {
     const env = getEnv();
     const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON);
+
+    // Validate required fields
+    if (!serviceAccount.project_id || !serviceAccount.private_key || !serviceAccount.client_email) {
+      throw new Error('Invalid Firebase service account credentials: missing required fields');
+    }
+
+    console.log(`Initializing Firebase Admin SDK for project: ${serviceAccount.project_id}`);
+
     adminApp = admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
     });
@@ -24,7 +32,17 @@ export async function sendTaskReminderNotifications(
   const app = getFirebaseApp();
   const messaging = admin.messaging(app);
 
-  const fcmTokens = devices.map((d) => d.fcm_token);
+  // Filter out invalid tokens
+  const validTokens = devices
+    .map((d) => d.fcm_token)
+    .filter((token) => token && typeof token === 'string' && token.trim().length > 0);
+
+  if (validTokens.length === 0) {
+    console.log('No valid FCM tokens found for devices');
+    return;
+  }
+
+  const fcmTokens = validTokens;
 
   // Calculate relative time string
   const now = new Date();
@@ -54,7 +72,7 @@ export async function sendTaskReminderNotifications(
   };
 
   try {
-    const response = await messaging.sendMulticast({
+    const response = await messaging.sendEachForMulticast({
       tokens: fcmTokens,
       notification,
       data: {
@@ -86,7 +104,11 @@ export async function sendTaskReminderNotifications(
       }
     }
   } catch (error) {
-    console.error('Failed to send FCM notifications:', error);
+    console.error('Failed to send FCM notifications:', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      tokenCount: fcmTokens.length,
+      deviceCount: devices.length,
+    });
     throw error;
   }
 }

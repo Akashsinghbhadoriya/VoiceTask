@@ -34,6 +34,20 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.akash.voicetask.domain.model.ExtractedTask
 import com.akash.voicetask.domain.model.TaskRequest
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
+private fun formatDateTime(isoString: String?): String {
+    if (isoString == null) return ""
+    return try {
+        val cleaned = isoString.replace("Z", "").trim()
+        val dateTime = LocalDateTime.parse(cleaned)
+        dateTime.format(DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm"))
+    } catch (e: Exception) {
+        android.util.Log.e("formatDateTime", "Failed to parse: $isoString", e)
+        isoString
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,6 +114,15 @@ fun PreviewScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
+
+            // Display the formatted due date/time in IST from backend extraction
+            if (extracted.dueAtUser != null) {
+                Text(
+                    text = "Extracted Time: ${formatDateTime(extracted.dueAtUser)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
 
             ExposedDropdownMenuBox(
                 expanded = reminderExpanded,

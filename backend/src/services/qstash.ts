@@ -45,10 +45,11 @@ export async function cancelTaskReminder(messageId: string): Promise<void> {
     await (client as any).messages.delete(messageId);
   } catch (error) {
     // Ignore 404 errors (message already processed or doesn't exist)
-    if (
-      error instanceof Error &&
-      error.message.includes('404')
-    ) {
+    const isNotFound =
+      (error instanceof Error && error.message.includes('404')) ||
+      ((error as any)?.status === 404);
+
+    if (isNotFound) {
       return;
     }
     throw error;

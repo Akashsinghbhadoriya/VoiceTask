@@ -1,6 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authMiddleware } from '../middleware/auth.js';
-import { transcribeAudio, extractTaskDetails } from '../services/openai.js';
+import { transcribeAudio, extractTaskDetails, convertUtcToUserTimezone } from '../services/openai.js';
 import { extractTaskSchema, transcribeResponseSchema, extractedTaskSchema } from '../schemas/task.js';
 import { BadRequestError } from '../utils/errors.js';
 import { getSupabase } from '../config/supabase.js';
@@ -90,7 +90,14 @@ async function postExtract(request: FastifyRequest, reply: FastifyReply) {
     }
 
     const extracted = await extractTaskDetails(text, userTimezone);
-    const result = extractedTaskSchema.parse(extracted);
+
+    // Add dueAtUser field for timezone-aware display
+    const extractedWithUserTime = {
+      ...extracted,
+      dueAtUser: extracted.dueAt ? convertUtcToUserTimezone(extracted.dueAt, userTimezone) : null,
+    };
+
+    const result = extractedTaskSchema.parse(extractedWithUserTime);
 
     reply.status(200).send(result);
   } catch (error) {

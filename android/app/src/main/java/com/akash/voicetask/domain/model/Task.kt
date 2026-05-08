@@ -40,6 +40,7 @@ data class ExtractedTask(
     val title: String,
     val description: String? = null,
     val dueAt: String? = null,
+    val dueAtUser: String? = null,
     val reminderOffsetMinutes: Int = 15,
     val priority: String = "medium"
 )

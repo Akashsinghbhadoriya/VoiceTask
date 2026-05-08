@@ -5,24 +5,28 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
+import com.akash.voicetask.data.remote.ApiService
+import com.akash.voicetask.data.remote.DeviceRequest
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+@AndroidEntryPoint
 class FcmService : FirebaseMessagingService() {
+
+    @Inject
+    lateinit var apiService: ApiService
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        // Register device with backend
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Get API service and register token
-                // This would be done via dependency injection in a real implementation
-                // For now, we just log it
-                android.util.Log.d("FcmService", "New FCM token: $token")
+                apiService.registerDevice(DeviceRequest(fcmToken = token, platform = "android"))
+                android.util.Log.d("FcmService", "Device registered with token: $token")
             } catch (e: Exception) {
                 android.util.Log.e("FcmService", "Failed to register device", e)
             }

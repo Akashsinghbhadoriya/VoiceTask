@@ -165,6 +165,10 @@ async function patchTask(request: FastifyRequest, reply: FastifyReply) {
 
   const bodyResult = updateTaskSchema.safeParse(request.body);
   if (!bodyResult.success) {
+    request.log.error(
+      { errors: bodyResult.error.errors, body: request.body },
+      'Task update validation failed'
+    );
     throw new BadRequestError('Invalid request body');
   }
 

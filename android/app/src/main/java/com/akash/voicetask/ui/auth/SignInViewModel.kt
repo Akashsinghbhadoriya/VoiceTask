@@ -3,7 +3,9 @@ package com.akash.voicetask.ui.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.akash.voicetask.data.remote.ApiService
+import com.akash.voicetask.data.remote.DeviceRequest
 import com.akash.voicetask.data.remote.UserUpdateRequest
+import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
@@ -12,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
@@ -46,6 +49,12 @@ class SignInViewModel @Inject constructor(
                         apiService.createOrUpdateUser(UserUpdateRequest(name = name, picture = picture))
                     } catch (_: Exception) {
                         // Non-fatal: backend user sync failed, task creation will retry on next sign-in
+                    }
+                    try {
+                        val token = FirebaseMessaging.getInstance().token.await()
+                        apiService.registerDevice(DeviceRequest(fcmToken = token, platform = "android"))
+                    } catch (_: Exception) {
+                        // Non-fatal: device registration failed, will retry on next token refresh
                     }
                 }
             }

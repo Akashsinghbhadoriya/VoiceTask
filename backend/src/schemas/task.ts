@@ -6,7 +6,7 @@ export const taskStatusSchema = z.enum(['PENDING', 'COMPLETED', 'DISMISSED']);
 export const createTaskSchema = z.object({
   title: z.string().min(1).max(255),
   description: z.string().optional(),
-  dueAt: z.string().datetime().nullable().optional(),
+  dueAt: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)).nullable().optional(),
   reminderOffsetMinutes: z.number().int().nonnegative().default(15),
   priority: prioritySchema.default('MEDIUM'),
   transcript: z.string().optional(),
@@ -15,7 +15,7 @@ export const createTaskSchema = z.object({
 export const updateTaskSchema = z.object({
   title: z.string().min(1).max(255).optional(),
   description: z.string().optional(),
-  dueAt: z.string().datetime().nullable().optional(),
+  dueAt: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)).nullable().optional(),
   reminderOffsetMinutes: z.number().int().nonnegative().optional(),
   priority: prioritySchema.optional(),
   status: taskStatusSchema.optional(),
@@ -49,7 +49,8 @@ export const extractTaskSchema = z.object({
 export const extractedTaskSchema = z.object({
   title: z.string(),
   description: z.string().nullable(),
-  dueAt: z.string().datetime().nullable(),
+  dueAt: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)).nullable(),
+  dueAtUser: z.string().datetime().nullable().optional(),
   reminderOffsetMinutes: z.number(),
   priority: z.enum(['low', 'medium', 'high']),
 });
