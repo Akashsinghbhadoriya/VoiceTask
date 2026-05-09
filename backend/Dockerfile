@@ -34,5 +34,9 @@ COPY --from=builder /app/dist ./dist
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
+ENV PORT=3000
+
+EXPOSE 3000
+
 # Start server
 CMD ["node", "dist/server.js"]
