@@ -96,10 +96,8 @@ export async function sendTaskReminderNotifications(
           await supabase
             .from('devices')
             .delete()
-            .eq('fcm_token', token)
-            .catch(() => {
-              // Silently ignore if device doesn't exist
-            });
+            .eq('fcm_token', token);
+          // Silently ignore errors if device doesn't exist
         }
       }
     }

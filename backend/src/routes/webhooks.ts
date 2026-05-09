@@ -76,18 +76,17 @@ async function postQstashWebhook(request: FastifyRequest, reply: FastifyReply) {
   }
 
   // Send FCM notifications
+  const devices = task.user.devices || [];
   try {
-    const devices = task.user.devices || [];
     await sendTaskReminderNotifications(devices, task, supabase);
-
-    // Update task status to COMPLETED after successful notification
-    await (supabase.from('tasks') as any)
-      .update({ status: 'COMPLETED' })
-      .eq('id', taskId);
   } catch (error) {
     request.log.error(error, 'Failed to send FCM notifications');
-    return reply.status(200).send({ success: false, error: String(error) });
   }
+
+  // Always update task status to COMPLETED regardless of notification result
+  await (supabase.from('tasks') as any)
+    .update({ status: 'COMPLETED' })
+    .eq('id', taskId);
 
   reply.status(200).send({ success: true });
 }
