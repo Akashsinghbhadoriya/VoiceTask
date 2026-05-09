@@ -16,14 +16,16 @@ async function main() {
   const fastify = Fastify({
     logger: {
       level: env.LOG_LEVEL,
-      transport: {
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'SYS:standard',
-          ignore: 'pid,hostname',
+      ...(env.NODE_ENV !== 'production' && {
+        transport: {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            translateTime: 'SYS:standard',
+            ignore: 'pid,hostname',
+          },
         },
-      },
+      }),
     },
   });
 
