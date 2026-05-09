@@ -23,6 +23,14 @@ async function postDevice(request: FastifyRequest, reply: FastifyReply) {
 
   const supabase = getSupabase();
 
+  // Remove old tokens for this user+platform before registering new one
+  await supabase
+    .from('devices')
+    .delete()
+    .eq('user_id', request.user!.id)
+    .eq('platform', platform)
+    .neq('fcm_token', fcmToken);
+
   // Upsert device
   const { data: device, error } = (await supabase
     .from('devices')
