@@ -59,40 +59,18 @@ export async function sendTaskReminderNotifications(
     return;
   }
 
-  // Calculate relative time string
-  const now = new Date();
-  const dueAt = task.due_at ? new Date(task.due_at) : null;
-  let dueString = 'Later';
-
-  if (dueAt) {
-    const diffMs = dueAt.getTime() - now.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) {
-      dueString = 'Now';
-    } else if (diffMins < 60) {
-      dueString = `in ${diffMins}m`;
-    } else if (diffHours < 24) {
-      dueString = `in ${diffHours}h`;
-    } else {
-      dueString = `in ${diffDays}d`;
-    }
-  }
-
-  const notification: admin.messaging.Notification = {
-    title: task.title,
-    body: `Due ${dueString}`,
-  };
-
+  // Data-only message (no notification field) so onMessageReceived is always called
+  // regardless of app state. The Android app handles the notification display and
+  // TTS announcement itself, with deduplication against the local AlarmManager alarm.
   try {
     const response = await messaging.sendEachForMulticast({
       tokens: fcmTokens,
-      notification,
       data: {
+        type: 'REMINDER_FIRED',
         taskId: task.id,
+        title: task.title,
       },
+      android: { priority: 'high' },
     });
 
     await cleanupStaleTokens(supabase, fcmTokens, response.responses);

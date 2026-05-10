@@ -1,6 +1,7 @@
 package com.akash.voicetask.notification
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
@@ -28,6 +29,14 @@ class MarkTaskCompleteWorker @AssistedInject constructor(
         return try {
             apiService.updateTaskStatus(taskId, UpdateTaskStatusRequest(status = "COMPLETED"))
             Log.d(TAG, "Task $taskId marked COMPLETED")
+
+            // Stop repeating voice announcement if it's still running for this task
+            val stopIntent = Intent(applicationContext, TtsAnnouncementService::class.java).apply {
+                action = TtsAnnouncementService.ACTION_STOP
+                putExtra(TtsAnnouncementService.EXTRA_TASK_ID, taskId)
+            }
+            applicationContext.startService(stopIntent)
+
             Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to mark task $taskId complete", e)

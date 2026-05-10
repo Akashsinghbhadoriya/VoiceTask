@@ -52,8 +52,36 @@ class FcmService : FirebaseMessagingService() {
                 alarmScheduler.cancelAlarm(taskId)
                 android.util.Log.d("FcmService", "Cancelled alarm for task $taskId")
             }
+            "REMINDER_FIRED" -> {
+                // QStash fallback path — fires for offline devices that missed their local alarm.
+                // For online devices the local AlarmManager already handled voice; the deduplication
+                // flag prevents a second announcement from firing.
+                val taskId = message.data["taskId"] ?: return
+                val title = message.data["title"] ?: "Task Reminder"
+
+                val prefs = getSharedPreferences(ReminderAlarmReceiver.PREFS_NAME, MODE_PRIVATE)
+                val voiceStartedAt = prefs.getLong(
+                    ReminderAlarmReceiver.KEY_VOICE_STARTED_PREFIX + taskId, 0L
+                )
+                val alreadyHandledByLocalAlarm =
+                    voiceStartedAt > 0L && (System.currentTimeMillis() - voiceStartedAt) < 30_000L
+
+                NotificationHelper.showReminderNotification(this, taskId, title)
+
+                if (!alreadyHandledByLocalAlarm) {
+                    android.util.Log.d("FcmService", "REMINDER_FIRED: starting TTS for offline task $taskId")
+                    val ttsIntent = Intent(this, TtsAnnouncementService::class.java).apply {
+                        action = TtsAnnouncementService.ACTION_START
+                        putExtra(TtsAnnouncementService.EXTRA_TASK_ID, taskId)
+                        putExtra(TtsAnnouncementService.EXTRA_TASK_TITLE, title)
+                    }
+                    startForegroundService(ttsIntent)
+                } else {
+                    android.util.Log.d("FcmService", "REMINDER_FIRED: local alarm already handled voice for task $taskId — skipping TTS")
+                }
+            }
             else -> {
-                // Legacy/fallback notification message (e.g. from QStash webhook for offline devices)
+                // Unknown/legacy message type — show a plain notification, no voice
                 val title = message.notification?.title ?: "VoiceTask"
                 val body = message.notification?.body ?: "Task reminder"
                 val taskId = message.data["taskId"] ?: ""

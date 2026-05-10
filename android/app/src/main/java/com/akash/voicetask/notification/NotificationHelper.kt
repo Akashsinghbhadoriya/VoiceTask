@@ -5,10 +5,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 
 object NotificationHelper {
     const val CHANNEL_ID = "task_reminders"
@@ -23,12 +23,13 @@ object NotificationHelper {
             ).apply {
                 description = "Notifications for task reminders"
                 enableVibration(true)
+                setBypassDnd(true)
                 setSound(
                     android.media.RingtoneManager.getDefaultUri(
-                        android.media.RingtoneManager.TYPE_NOTIFICATION
+                        android.media.RingtoneManager.TYPE_ALARM
                     ),
-                    android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
                         .build()
                 )
             }
@@ -40,8 +41,9 @@ object NotificationHelper {
     }
 
     /**
-     * Show a reminder notification for a task. Called by ReminderAlarmReceiver when
-     * the local AlarmManager alarm fires. Works without an active app process.
+     * Show a reminder notification for a task. Called by ReminderAlarmReceiver (local alarm)
+     * and FcmService REMINDER_FIRED handler (QStash fallback for offline devices).
+     * Includes a Stop action that silences the repeating TTS announcement.
      */
     fun showReminderNotification(context: Context, taskId: String, title: String) {
         createNotificationChannel(context)
@@ -50,21 +52,33 @@ object NotificationHelper {
             data = Uri.parse("voicetask://tasks/detail?taskId=$taskId")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
-        val pendingIntent = PendingIntent.getActivity(
+        val contentPendingIntent = PendingIntent.getActivity(
             context,
             taskId.hashCode(),
             deepLinkIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val stopIntent = Intent(context, StopAnnouncementReceiver::class.java).apply {
+            action = TtsAnnouncementService.ACTION_STOP
+            putExtra(TtsAnnouncementService.EXTRA_TASK_ID, taskId)
+        }
+        val stopPendingIntent = PendingIntent.getBroadcast(
+            context,
+            "stop_$taskId".hashCode(),
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
-            .setContentText("Time to complete your task")
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentText("Tap Stop to silence the announcement")
+            .setContentIntent(contentPendingIntent)
+            .setAutoCancel(false)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .addAction(android.R.drawable.ic_delete, "Stop", stopPendingIntent)
             .build()
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
