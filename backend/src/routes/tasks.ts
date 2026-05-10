@@ -5,6 +5,16 @@ import { createTaskSchema, updateTaskSchema } from '../schemas/task.js';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../utils/errors.js';
 import { scheduleTaskReminder, cancelTaskReminder } from '../services/qstash.js';
 import { convertUtcToUserTimezone } from '../services/openai.js';
+import { sendScheduleAlarmMessage, sendCancelAlarmMessage } from '../services/fcm.js';
+
+async function getDevicesForUser(supabase: any, userId: string): Promise<any[]> {
+  const { data, error } = await supabase.from('devices').select('*').eq('user_id', userId);
+  if (error) {
+    console.error('Failed to fetch user devices:', error.message);
+    return [];
+  }
+  return data ?? [];
+}
 
 // Helper to add dueAtUser field for user's timezone display
 async function addDueAtUserField(tasks: any[], userId: string): Promise<any[]> {
@@ -154,6 +164,14 @@ async function postTask(request: FastifyRequest, reply: FastifyReply) {
     request.log.warn('Task created without dueAt - no reminder will be scheduled');
   }
 
+  // Send schedule alarm data message to all user devices (fire-and-forget)
+  if (dueAt) {
+    const devices = await getDevicesForUser(supabase, request.user!.id);
+    sendScheduleAlarmMessage(devices, task, supabase).catch((err) =>
+      request.log.error({ err, taskId: task.id }, 'Failed to send SCHEDULE_ALARM FCM')
+    );
+  }
+
   const [taskWithUserTime] = await addDueAtUserField([task], request.user!.id);
   reply.status(201).send(taskWithUserTime);
 }
@@ -228,6 +246,20 @@ async function patchTask(request: FastifyRequest, reply: FastifyReply) {
 
   if (updateError) throw new BadRequestError(updateError.message);
 
+  // Send alarm data message to all user devices (fire-and-forget)
+  {
+    const devices = await getDevicesForUser(supabase, request.user!.id);
+    if (newStatus === 'PENDING' && newDueAt) {
+      sendScheduleAlarmMessage(devices, updated, supabase).catch((err) =>
+        request.log.error({ err, taskId: id }, 'Failed to send SCHEDULE_ALARM FCM')
+      );
+    } else {
+      sendCancelAlarmMessage(devices, id).catch((err) =>
+        request.log.error({ err, taskId: id }, 'Failed to send CANCEL_ALARM FCM')
+      );
+    }
+  }
+
   const [updatedWithUserTime] = await addDueAtUserField([updated], request.user!.id);
   reply.status(200).send(updatedWithUserTime);
 }
@@ -264,6 +296,14 @@ async function deleteTask(request: FastifyRequest, reply: FastifyReply) {
     .eq('id', id);
 
   if (deleteError) throw new BadRequestError(deleteError.message);
+
+  // Send cancel alarm data message to all user devices (fire-and-forget)
+  {
+    const devices = await getDevicesForUser(supabase, task.user_id);
+    sendCancelAlarmMessage(devices, id).catch((err) =>
+      request.log.error({ err, taskId: id }, 'Failed to send CANCEL_ALARM FCM')
+    );
+  }
 
   reply.status(204).send();
 }

@@ -22,6 +22,27 @@ function getFirebaseApp(): admin.app.App {
   return adminApp;
 }
 
+function getValidTokens(devices: any[]): string[] {
+  return devices
+    .map((d) => d.fcm_token)
+    .filter((token) => token && typeof token === 'string' && token.trim().length > 0);
+}
+
+async function cleanupStaleTokens(
+  supabase: any,
+  fcmTokens: string[],
+  responses: admin.messaging.SendResponse[]
+): Promise<void> {
+  if (!responses.some((r) => !r.success)) return;
+
+  for (let idx = 0; idx < responses.length; idx++) {
+    const r = responses[idx];
+    if (!r.success && r.error?.code === 'messaging/registration-token-not-registered') {
+      await supabase.from('devices').delete().eq('fcm_token', fcmTokens[idx]);
+    }
+  }
+}
+
 export async function sendTaskReminderNotifications(
   devices: any[],
   task: any,
@@ -32,17 +53,11 @@ export async function sendTaskReminderNotifications(
   const app = getFirebaseApp();
   const messaging = admin.messaging(app);
 
-  // Filter out invalid tokens
-  const validTokens = devices
-    .map((d) => d.fcm_token)
-    .filter((token) => token && typeof token === 'string' && token.trim().length > 0);
-
-  if (validTokens.length === 0) {
+  const fcmTokens = getValidTokens(devices);
+  if (fcmTokens.length === 0) {
     console.log('No valid FCM tokens found for devices');
     return;
   }
-
-  const fcmTokens = validTokens;
 
   // Calculate relative time string
   const now = new Date();
@@ -80,27 +95,7 @@ export async function sendTaskReminderNotifications(
       },
     });
 
-    // Delete any invalid tokens
-    if (response.failureCount > 0) {
-      const failedTokens = response.responses
-        .map((r: any, idx: number) => (r.success ? null : fcmTokens[idx]))
-        .filter(Boolean) as string[];
-
-      for (const token of failedTokens) {
-        const error = response.responses[fcmTokens.indexOf(token)]?.error;
-        if (
-          error &&
-          error.code === 'messaging/registration-token-not-registered'
-        ) {
-          // Delete the device record for this invalid token
-          await supabase
-            .from('devices')
-            .delete()
-            .eq('fcm_token', token);
-          // Silently ignore errors if device doesn't exist
-        }
-      }
-    }
+    await cleanupStaleTokens(supabase, fcmTokens, response.responses);
   } catch (error) {
     console.error('Failed to send FCM notifications:', {
       errorMessage: error instanceof Error ? error.message : String(error),
@@ -108,5 +103,77 @@ export async function sendTaskReminderNotifications(
       deviceCount: devices.length,
     });
     throw error;
+  }
+}
+
+export async function sendScheduleAlarmMessage(
+  devices: any[],
+  task: { id: string; title: string; due_at: string; reminder_offset_minutes: number },
+  supabase: any
+): Promise<void> {
+  if (devices.length === 0 || !task.due_at) return;
+
+  const app = getFirebaseApp();
+  const messaging = admin.messaging(app);
+
+  const fcmTokens = getValidTokens(devices);
+  if (fcmTokens.length === 0) return;
+
+  // Supabase TIMESTAMP columns return without timezone suffix (e.g. "2026-05-10T17:30:00").
+  // Appending 'Z' forces UTC parsing — without it, new Date() on a non-UTC machine
+  // treats the string as local time and the fireAt ends up hours off.
+  const dueAtUtc = task.due_at.endsWith('Z') || task.due_at.includes('+') ? task.due_at : task.due_at + 'Z';
+  const fireAtMs = new Date(dueAtUtc).getTime() - task.reminder_offset_minutes * 60_000;
+
+  try {
+    const response = await messaging.sendEachForMulticast({
+      tokens: fcmTokens,
+      data: {
+        type: 'SCHEDULE_ALARM',
+        taskId: task.id,
+        fireAt: fireAtMs.toString(),
+        title: task.title,
+        reminderOffsetMinutes: task.reminder_offset_minutes.toString(),
+      },
+      android: { priority: 'high' },
+    });
+
+    await cleanupStaleTokens(supabase, fcmTokens, response.responses);
+  } catch (error) {
+    console.error('Failed to send SCHEDULE_ALARM FCM message:', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      taskId: task.id,
+    });
+    // Don't rethrow — scheduling message failure is non-critical (QStash is the fallback)
+  }
+}
+
+export async function sendCancelAlarmMessage(
+  devices: any[],
+  taskId: string
+): Promise<void> {
+  if (devices.length === 0) return;
+
+  const app = getFirebaseApp();
+  const messaging = admin.messaging(app);
+
+  const fcmTokens = getValidTokens(devices);
+  if (fcmTokens.length === 0) return;
+
+  try {
+    await messaging.sendEachForMulticast({
+      tokens: fcmTokens,
+      data: {
+        type: 'CANCEL_ALARM',
+        taskId,
+      },
+      android: { priority: 'high' },
+    });
+  } catch (error) {
+    console.error('Failed to send CANCEL_ALARM FCM message:', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      taskId,
+    });
+    // Don't rethrow — cancel message failure is non-critical
   }
 }

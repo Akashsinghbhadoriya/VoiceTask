@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.js';
 import { getSupabase } from '../config/supabase.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';
+import { sendScheduleAlarmMessage } from '../services/fcm.js';
 
 const registerDeviceSchema = z.object({
   fcmToken: z.string().min(1),
@@ -47,6 +48,25 @@ async function postDevice(request: FastifyRequest, reply: FastifyReply) {
     .single()) as any;
 
   if (error) throw new BadRequestError(error.message);
+
+  // Send SCHEDULE_ALARM for all pending future tasks — catches up tasks created before
+  // the device was registered (first install, reinstall, FCM token refresh)
+  const now = new Date().toISOString();
+  const { data: pendingTasks } = (await supabase
+    .from('tasks')
+    .select('*')
+    .eq('user_id', request.user!.id)
+    .eq('status', 'PENDING')
+    .not('due_at', 'is', null)
+    .gt('due_at', now)) as any;
+
+  if (pendingTasks?.length) {
+    for (const task of pendingTasks) {
+      sendScheduleAlarmMessage([device], task, supabase).catch((err) =>
+        request.log.error({ err, taskId: task.id }, 'Failed to send SCHEDULE_ALARM on device register')
+      );
+    }
+  }
 
   reply.status(200).send(device);
 }
