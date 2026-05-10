@@ -36,4 +36,7 @@ interface TaskDao {
 
     @Query("DELETE FROM tasks")
     suspend fun deleteAllTasks()
+
+    @Query("SELECT * FROM tasks WHERE status = 'PENDING' AND dueAt IS NOT NULL")
+    suspend fun getPendingTasksWithDueAt(): List<TaskEntity>
 }

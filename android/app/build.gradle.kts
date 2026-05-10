@@ -24,7 +24,7 @@ android {
             useSupportLibrary = true
         }
 
-        buildConfigField("String", "BACKEND_URL", "\"https://voicetaskbackend-628699616717.asia-south2.run.app\"")
+        buildConfigField("String", "BACKEND_URL", "\"https://bf73-122-170-193-29.ngrok-free.app\"")
         buildConfigField("String", "SUPABASE_URL", "\"https://undegzabvxewfxeqsvgm.supabase.co\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVuZGVnemFidnhld2Z4ZXFzdmdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MDgzMjksImV4cCI6MjA5MzM4NDMyOX0.K2zrVW6iTzl2JeJ9l8fkp-WjW3Ba0Vu8Qmx8EK40CXk\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"504524833700-4av4umvteukrmv1arksppta2eca4250b.apps.googleusercontent.com\"")
@@ -80,6 +80,11 @@ dependencies {
     implementation("com.google.dagger:hilt-android:2.58")
     ksp("com.google.dagger:hilt-compiler:2.58")
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
+
+    // WorkManager
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 
     // Retrofit + Kotlinx Serialization
     implementation("com.squareup.retrofit2:retrofit:2.10.0")

@@ -31,6 +31,11 @@ data class TaskRequest(
 )
 
 @Serializable
+data class UpdateTaskStatusRequest(
+    val status: String
+)
+
+@Serializable
 data class TranscribeResponse(
     val transcript: String
 )

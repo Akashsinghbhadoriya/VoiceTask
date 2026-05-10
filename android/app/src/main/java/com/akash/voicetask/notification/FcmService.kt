@@ -21,6 +21,9 @@ class FcmService : FirebaseMessagingService() {
     @Inject
     lateinit var apiService: ApiService
 
+    @Inject
+    lateinit var alarmScheduler: AlarmScheduler
+
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         CoroutineScope(Dispatchers.IO).launch {
@@ -36,11 +39,27 @@ class FcmService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
-        val title = message.notification?.title ?: "VoiceTask"
-        val body = message.notification?.body ?: "Task reminder"
-        val taskId = message.data["taskId"] ?: ""
-
-        showNotification(title, body, taskId)
+        when (message.data["type"]) {
+            "SCHEDULE_ALARM" -> {
+                val taskId = message.data["taskId"] ?: return
+                val fireAtMs = message.data["fireAt"]?.toLongOrNull() ?: return
+                val title = message.data["title"] ?: "Task Reminder"
+                alarmScheduler.scheduleAlarm(taskId, title, fireAtMs)
+                android.util.Log.d("FcmService", "Scheduled alarm for task $taskId at $fireAtMs")
+            }
+            "CANCEL_ALARM" -> {
+                val taskId = message.data["taskId"] ?: return
+                alarmScheduler.cancelAlarm(taskId)
+                android.util.Log.d("FcmService", "Cancelled alarm for task $taskId")
+            }
+            else -> {
+                // Legacy/fallback notification message (e.g. from QStash webhook for offline devices)
+                val title = message.notification?.title ?: "VoiceTask"
+                val body = message.notification?.body ?: "Task reminder"
+                val taskId = message.data["taskId"] ?: ""
+                showNotification(title, body, taskId)
+            }
+        }
     }
 
     private fun showNotification(title: String, body: String, taskId: String) {

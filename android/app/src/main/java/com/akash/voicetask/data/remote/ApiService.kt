@@ -4,6 +4,7 @@ import com.akash.voicetask.domain.model.ExtractedTask
 import com.akash.voicetask.domain.model.Task
 import com.akash.voicetask.domain.model.TaskRequest
 import com.akash.voicetask.domain.model.TranscribeResponse
+import com.akash.voicetask.domain.model.UpdateTaskStatusRequest
 import com.akash.voicetask.domain.model.UserSession
 import okhttp3.MultipartBody
 import retrofit2.http.Body
@@ -80,6 +81,12 @@ interface ApiService {
     suspend fun updateTask(
         @Path("id") taskId: String,
         @Body request: TaskRequest
+    ): Task
+
+    @PATCH("tasks/{id}")
+    suspend fun updateTaskStatus(
+        @Path("id") taskId: String,
+        @Body request: UpdateTaskStatusRequest
     ): Task
 
     @DELETE("tasks/{id}")
