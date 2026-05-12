@@ -163,13 +163,36 @@ class TtsAnnouncementService : Service() {
         }
     }
 
+    private fun isDndActive(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            return nm.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
+        }
+        return false
+    }
+
     private fun requestAudioFocusAndMaxVolume() {
         originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
-        audioManager.setStreamVolume(
-            AudioManager.STREAM_ALARM,
-            audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM),
-            0
-        )
+
+        val alarmMax = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+        val targetVolume = if (isDndActive()) {
+            // DND is on — use whichever of alarm or ringtone is currently set louder
+            val alarmCurrent = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
+            val ringCurrent = audioManager.getStreamVolume(AudioManager.STREAM_RING)
+            val ringMax = audioManager.getStreamMaxVolume(AudioManager.STREAM_RING)
+            val alarmFraction = if (alarmMax > 0) alarmCurrent.toFloat() / alarmMax else 0f
+            val ringFraction = if (ringMax > 0) ringCurrent.toFloat() / ringMax else 0f
+            if (ringFraction > alarmFraction) {
+                (ringFraction * alarmMax).toInt().coerceAtMost(alarmMax)
+            } else {
+                alarmCurrent
+            }
+        } else {
+            // No DND — play at 100% max
+            alarmMax
+        }
+
+        audioManager.setStreamVolume(AudioManager.STREAM_ALARM, targetVolume, 0)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
