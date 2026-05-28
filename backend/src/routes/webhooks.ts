@@ -83,11 +83,6 @@ async function postQstashWebhook(request: FastifyRequest, reply: FastifyReply) {
     request.log.error(error, 'Failed to send FCM notifications');
   }
 
-  // Always update task status to COMPLETED regardless of notification result
-  await (supabase.from('tasks') as any)
-    .update({ status: 'COMPLETED' })
-    .eq('id', taskId);
-
   reply.status(200).send({ success: true });
 }
 

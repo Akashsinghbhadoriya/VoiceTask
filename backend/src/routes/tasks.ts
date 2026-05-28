@@ -4,7 +4,7 @@ import { getSupabase } from '../config/supabase.js';
 import { createTaskSchema, updateTaskSchema } from '../schemas/task.js';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../utils/errors.js';
 import { scheduleTaskReminder, cancelTaskReminder } from '../services/qstash.js';
-import { convertUtcToUserTimezone } from '../services/openai.js';
+import { convertUtcToUserTimezone, transcribeAudio, extractTaskDetails } from '../services/openai.js';
 import { sendScheduleAlarmMessage, sendCancelAlarmMessage } from '../services/fcm.js';
 
 async function getDevicesForUser(supabase: any, userId: string): Promise<any[]> {
@@ -308,10 +308,123 @@ async function deleteTask(request: FastifyRequest, reply: FastifyReply) {
   reply.status(204).send();
 }
 
+async function postRescheduleVoice(request: FastifyRequest, reply: FastifyReply) {
+  await authMiddleware(request, reply);
+
+  const { id } = request.params as { id: string };
+
+  const supabase = getSupabase();
+  const { data: task, error: fetchError } = (await supabase
+    .from('tasks')
+    .select('*')
+    .eq('id', id)
+    .single()) as any;
+
+  if (fetchError) {
+    if (fetchError.code === 'PGRST116') throw new NotFoundError('Task not found');
+    throw new BadRequestError(fetchError.message);
+  }
+
+  if (task.user_id !== request.user!.id) {
+    throw new ForbiddenError('You do not own this task');
+  }
+
+  // Parse multipart: audio file + optional timezone field
+  let audioBuffer: Buffer | null = null;
+  let timezone = 'Asia/Kolkata';
+
+  try {
+    const parts = request.parts();
+    for await (const part of parts) {
+      if (part.type === 'file' && part.fieldname === 'audio') {
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) {
+          chunks.push(chunk instanceof Buffer ? chunk : Buffer.from(chunk));
+        }
+        audioBuffer = Buffer.concat(chunks);
+      } else if (part.type === 'field' && part.fieldname === 'timezone') {
+        timezone = (part as any).value as string;
+      }
+    }
+  } catch (error) {
+    throw new BadRequestError('Failed to parse multipart request');
+  }
+
+  if (!audioBuffer || audioBuffer.length === 0) {
+    throw new BadRequestError('No audio provided');
+  }
+
+  // Transcribe audio → extract new dueAt
+  let transcript: string;
+  try {
+    transcript = await transcribeAudio(audioBuffer);
+  } catch (error) {
+    request.log.error(error, 'Transcription failed in reschedule-voice');
+    throw new BadRequestError('Transcription failed');
+  }
+
+  let extracted: Awaited<ReturnType<typeof extractTaskDetails>>;
+  try {
+    extracted = await extractTaskDetails(transcript, timezone);
+  } catch (error) {
+    request.log.error(error, 'Extraction failed in reschedule-voice');
+    throw new BadRequestError('Time extraction failed');
+  }
+
+  if (!extracted.dueAt) {
+    return reply.status(400).send({
+      error: 'could_not_parse_time',
+      message: 'Could not understand the time from your voice. Please try again.',
+    });
+  }
+
+  const newDueAt = new Date(extracted.dueAt);
+  if (newDueAt <= new Date()) {
+    return reply.status(400).send({
+      error: 'time_in_past',
+      message: 'The time you specified is in the past. Please say a future time.',
+    });
+  }
+
+  // Cancel old QStash message
+  if (task.qstash_message_id) {
+    await cancelTaskReminder(task.qstash_message_id);
+  }
+
+  // Schedule new QStash message
+  const reminderOffset = task.reminder_offset_minutes ?? 15;
+  const fireTime = new Date(newDueAt.getTime() - reminderOffset * 60 * 1000);
+  const newQstashMessageId = (await scheduleTaskReminder(id, fireTime)) || null;
+
+  // Update task with new dueAt + qstashMessageId
+  const { data: updated, error: updateError } = (await (supabase.from('tasks') as any)
+    .update({
+      due_at: newDueAt.toISOString(),
+      qstash_message_id: newQstashMessageId,
+      status: 'PENDING',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single()) as any;
+
+  if (updateError) throw new BadRequestError(updateError.message);
+
+  // Send SCHEDULE_ALARM FCM so device reschedules local alarm
+  const devices = await getDevicesForUser(supabase, request.user!.id);
+  sendScheduleAlarmMessage(devices, updated, supabase).catch((err: Error) =>
+    request.log.error({ err, taskId: id }, 'Failed to send SCHEDULE_ALARM FCM after reschedule-voice')
+  );
+
+  const [updatedWithUserTime] = await addDueAtUserField([updated], request.user!.id);
+  reply.status(200).send(updatedWithUserTime);
+}
+
 export async function registerTasksRoutes(fastify: FastifyInstance) {
   fastify.get('/tasks', getTasks);
   fastify.get('/tasks/:id', getTaskById);
   fastify.post('/tasks', postTask);
   fastify.patch('/tasks/:id', patchTask);
   fastify.delete('/tasks/:id', deleteTask);
+  fastify.post('/tasks/:id/reschedule-voice', postRescheduleVoice);
 }
