@@ -66,6 +66,40 @@ export function convertUtcToUserTimezone(utcIsoString: string | null, timezone: 
   }
 }
 
+function getTimezoneOffsetString(timezone: string): string {
+  const now = new Date();
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(now);
+    const map: Record<string, string> = {};
+    parts.forEach(p => { if (p.type !== 'literal') map[p.type] = p.value; });
+
+    // Handle midnight edge case where hour comes back as "24"
+    const hour = map.hour === '24' ? '00' : map.hour;
+    const localMs = new Date(
+      `${map.year}-${map.month}-${map.day}T${hour}:${map.minute}:${map.second}Z`
+    ).getTime();
+    const offsetMinutes = Math.round((localMs - now.getTime()) / 60_000);
+
+    const sign = offsetMinutes >= 0 ? '+' : '-';
+    const absMin = Math.abs(offsetMinutes);
+    const h = String(Math.floor(absMin / 60)).padStart(2, '0');
+    const m = String(absMin % 60).padStart(2, '0');
+    return `${sign}${h}:${m}`;
+  } catch {
+    return '+00:00';
+  }
+}
+
 function getTimeInTimezone(timezone: string): { iso: string; readable: string } {
   try {
     const now = new Date();
@@ -108,13 +142,15 @@ export async function extractTaskDetails(
   const client = getOpenAiClient();
 
   const { iso: currentTimeISO, readable: currentTimeReadable } = getTimeInTimezone(timezone);
+  const utcOffset = getTimezoneOffsetString(timezone);
 
   const systemPrompt = `You are an expert task extraction assistant for a voice-to-task application. Your job is to parse natural language task descriptions and extract structured task information. Respond with ONLY a valid JSON object, no other text.
 
 ## CURRENT CONTEXT
 - Current time (ISO): ${currentTimeISO}
 - Current time (readable): ${currentTimeReadable}
-- User timezone: ${timezone}
+- User timezone: ${timezone} (UTC${utcOffset})
+- UTC offset: ${utcOffset} — to convert user local time to UTC, subtract this offset (e.g. for UTC+05:30, subtract 5 hours 30 minutes)
 
 ## TASK FIELD DEFINITIONS
 
