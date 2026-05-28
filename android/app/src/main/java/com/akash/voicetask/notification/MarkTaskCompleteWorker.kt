@@ -30,12 +30,12 @@ class MarkTaskCompleteWorker @AssistedInject constructor(
             apiService.updateTaskStatus(taskId, UpdateTaskStatusRequest(status = "COMPLETED"))
             Log.d(TAG, "Task $taskId marked COMPLETED")
 
-            // Stop repeating voice announcement if it's still running for this task
-            val stopIntent = Intent(applicationContext, TtsAnnouncementService::class.java).apply {
-                action = TtsAnnouncementService.ACTION_STOP
-                putExtra(TtsAnnouncementService.EXTRA_TASK_ID, taskId)
-            }
-            applicationContext.startService(stopIntent)
+            // Stop ringtone if still playing
+            applicationContext.startService(
+                Intent(applicationContext, RingtoneService::class.java).apply {
+                    action = RingtoneService.ACTION_STOP
+                }
+            )
 
             Result.success()
         } catch (e: Exception) {

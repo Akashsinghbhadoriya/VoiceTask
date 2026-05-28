@@ -67,16 +67,30 @@
             android:name=".notification.ReminderAlarmReceiver"
             android:exported="false" />
 
-        <!-- Receives Stop button taps from reminder/announcement notifications -->
+        <!-- Handles Complete/Reschedule notification action button taps -->
+        <receiver
+            android:name=".notification.TaskActionReceiver"
+            android:exported="false" />
+
+        <!-- Fallback receiver to stop ringtone (legacy path) -->
         <receiver
             android:name=".notification.StopAnnouncementReceiver"
             android:exported="false" />
 
-        <!-- Foreground service that loops TTS announcement until user stops it -->
+        <!-- Plays default ringtone on STREAM_RING when a task is due -->
         <service
-            android:name=".notification.TtsAnnouncementService"
+            android:name=".notification.RingtoneService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <!-- Full-screen activity shown when task alarm fires -->
+        <activity
+            android:name=".ui.due.TaskDueActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.VoiceTask" />
 
         <!-- Reschedules alarms after device reboot or app update -->
         <receiver

@@ -7,6 +7,7 @@ import com.akash.voicetask.domain.model.TranscribeResponse
 import com.akash.voicetask.domain.model.UpdateTaskStatusRequest
 import com.akash.voicetask.domain.model.UserSession
 import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -93,6 +94,14 @@ interface ApiService {
     suspend fun deleteTask(
         @Path("id") taskId: String
     )
+
+    @Multipart
+    @POST("tasks/{id}/reschedule-voice")
+    suspend fun rescheduleTaskVoice(
+        @Path("id") taskId: String,
+        @Part audio: MultipartBody.Part,
+        @Part("timezone") timezone: RequestBody
+    ): Task
 
     // Devices
     @POST("devices")
